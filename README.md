@@ -1,13 +1,50 @@
 # Airwise — AQI Insights
 
-A responsive air-quality dashboard for Pune. It retrieves current conditions, a 7-day model archive, and forecasts from Open-Meteo's air-quality and weather APIs; offers an opt-in device-location lookup with public reverse geocoding; compares Pune model grids; and includes Overview, Forecast, Neighborhoods, and a combined Take action workspace.
+[![CI](https://github.com/mrajat31/airwise/actions/workflows/ci.yml/badge.svg)](https://github.com/mrajat31/airwise/actions/workflows/ci.yml)
+
+A responsive air-quality dashboard for Pune. It answers the question most people open it with — *is the air OK right now, and when is it better?* — with a category-coloured AQI, plain-language guidance and the best time to be outside, in light or dark mode on any screen size.
+
+It retrieves current conditions, a 7-day model archive, and forecasts from Open-Meteo's air-quality and weather APIs; offers an opt-in device-location lookup with public reverse geocoding; compares Pune model grids; and includes Overview, Forecast, Neighborhoods, and a combined Take action workspace.
 
 ## Run locally
 
 1. Install Node.js 20 or newer.
-2. In this folder, run `npm install`.
+2. In this folder, run `npm ci`.
 3. Run `npm run dev` and open the local URL printed by Vite.
 4. Run `npm run build` to create the production site in `dist`.
+
+## Quality checks
+
+| Command | What it does |
+| --- | --- |
+| `npm run lint` | ESLint (React and hooks rules) |
+| `npm test` | Vitest unit and component tests (jsdom + Testing Library) |
+| `npm run test:watch` | Tests in watch mode |
+| `npm run test:coverage` | Tests with coverage; fails below 80% lines/statements/functions or 70% branches |
+| `npm run check` | Lint, coverage and build — the same checks CI runs |
+
+Tests live next to the code (`src/**/*.test.{js,jsx}`). Network calls are stubbed with fixtures in `src/test/fixtures.js`, so tests never call Open-Meteo.
+
+### Continuous integration
+
+- `.github/workflows/ci.yml` runs lint, tests with coverage and the build on Node 20 and 22 for every pull request. The coverage report is uploaded as an artifact.
+- `.github/workflows/deploy.yml` reruns the same checks on `main` and publishes to GitHub Pages only if they pass.
+- `.github/dependabot.yml` opens grouped weekly npm updates and monthly GitHub Actions updates.
+
+## Project structure
+
+```
+src/
+  App.jsx            state, data loading and routing between views
+  airQuality.js      Open-Meteo / geocoding clients, AQI categories and scale
+  areaActionPlan.js  area planning profiles and action templates
+  lib/               pure logic: formatting, forecast windows, health guidance, insights, saved places, plan text
+  components/        app shell, AQI hero, charts, area map, panels, shared UI
+  views/             Overview, Forecast, Neighborhoods, Take action
+  hooks/             theme and clock hooks
+  styles.css         design tokens (light/dark, AQI scale) and responsive layout
+docs/PRODUCT_PLAN.md personas, PMF hypothesis and roadmap
+```
 
 ## Deploy
 
@@ -60,6 +97,9 @@ The app is a static Vite site and can be deployed to Vercel, Netlify, or any sta
 The app surfaces loading and provider errors rather than substituting demo readings. Planned actions and alert reminder thresholds remain in the current browser session; there is no account, notification service, or database yet.
 
 ## Suggested next steps
+
+See [docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md) for the full plan. Highlights:
+
 
 - Integrate official CPCB/MPCB monitoring station data and show station identity, distance, and measurement time alongside model estimates.
 - Add persistent accounts, saved neighborhood preferences, and real alert delivery.
