@@ -653,12 +653,11 @@ function App() {
     const controller = new AbortController();
     const cacheKey = isCitywide ? "pune-city" : currentLocationId;
     const cached = airCache.current.get(cacheKey);
-    if (cached) {
-      setAir(cached.air);
-      setIsLoading(false);
-    } else {
-      setIsLoading(true);
-    }
+    // Never keep another location's reading on screen: show this location's
+    // cached reading, or nothing until its own data arrives.
+    setAir(cached?.air ?? null);
+    setWeather(null);
+    setIsLoading(!cached);
     setAirError("");
     setWeatherError("");
     if (isCitywide) {
@@ -948,7 +947,7 @@ function App() {
                 <p>Set an AQI level to keep in mind. This dashboard does not send push notifications.</p>
                 <label className="threshold-label">Show reminder above <strong>{threshold} AQI</strong></label>
                 <input className="threshold-slider" type="range" min="50" max="200" step="10" value={threshold} onChange={(event) => setThreshold(Number(event.target.value))} />
-                <div className={`alert-confirm ${air?.current?.us_aqi >= threshold ? "threshold-reached" : ""}`}>
+                <div className={`alert-confirm ${Number.isFinite(air?.current?.us_aqi) && Math.round(air.current.us_aqi) >= threshold ? "threshold-reached" : ""}`}>
                   <ShieldCheck size={14} />
                   {Number.isFinite(air?.current?.us_aqi)
                     ? Math.round(air.current.us_aqi) >= threshold

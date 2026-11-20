@@ -191,7 +191,10 @@ export async function fetchWeather(location, signal) {
 }
 
 export function aqiCategory(aqi) {
-  if (aqi == null) return { label: "Unavailable", tone: "neutral" };
+  if (!Number.isFinite(aqi)) return { label: "Unavailable", tone: "neutral" };
+  // Categorise the same rounded value the UI displays, so averaged readings
+  // such as 100.4 (shown as 100) are labelled "Moderate", not "Sensitive groups".
+  aqi = Math.round(aqi);
   if (aqi <= 50) return { label: "Good", tone: "good" };
   if (aqi <= 100) return { label: "Moderate", tone: "moderate" };
   if (aqi <= 150) return { label: "Sensitive groups", tone: "sensitive" };
