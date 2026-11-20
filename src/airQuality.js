@@ -1,3 +1,5 @@
+import { readingSignature } from "./lib/cells.js";
+
 const AIR_QUALITY_URL = "https://air-quality-api.open-meteo.com/v1/air-quality";
 const WEATHER_URL = "https://api.open-meteo.com/v1/forecast";
 const CURRENT_AIR_VARIABLES = "us_aqi,us_aqi_pm2_5,us_aqi_pm10,us_aqi_nitrogen_dioxide,us_aqi_ozone,pm2_5,pm10,nitrogen_dioxide,ozone";
@@ -31,16 +33,18 @@ async function getJson(url, signal) {
   return data;
 }
 
-function airQualityUrl(locations) {
+function airQualityUrl(locations, includeHourly = true) {
   const params = new URLSearchParams({
     latitude: locations.map(({ latitude }) => latitude).join(","),
     longitude: locations.map(({ longitude }) => longitude).join(","),
     current: CURRENT_AIR_VARIABLES,
-    hourly: HOURLY_AIR_VARIABLES,
-    past_days: "7",
-    forecast_days: "5",
     timezone: "auto",
   });
+  if (includeHourly) {
+    params.set("hourly", HOURLY_AIR_VARIABLES);
+    params.set("past_days", "7");
+    params.set("forecast_days", "5");
+  }
   return `${AIR_QUALITY_URL}?${params}`;
 }
 
@@ -54,18 +58,7 @@ export async function fetchAirQuality(location, signal) {
 }
 
 export async function fetchAreaAirQuality(areas, signal, includeForecast = false) {
-  const params = new URLSearchParams({
-    latitude: areas.map(({ latitude }) => latitude).join(","),
-    longitude: areas.map(({ longitude }) => longitude).join(","),
-    current: CURRENT_AIR_VARIABLES,
-    timezone: "auto",
-  });
-  if (includeForecast) {
-    params.set("hourly", HOURLY_AIR_VARIABLES);
-    params.set("past_days", "7");
-    params.set("forecast_days", "5");
-  }
-  const result = await getJson(`${AIR_QUALITY_URL}?${params}`, signal);
+  const result = await getJson(airQualityUrl(areas, includeForecast), signal);
   const readings = Array.isArray(result) ? result : [result];
   if (readings.length !== areas.length || readings.some((reading) => !reading.current)) {
     throw new Error("The provider returned incomplete readings for Pune areas. Please try again.");
@@ -77,10 +70,9 @@ export function aggregateAreaReadings(readings) {
   if (readings.length === 0 || readings.some((reading) => !reading.current)) {
     throw new Error("Complete area readings are required to calculate a Pune-wide average.");
   }
-  const uniqueReadings = [...new Map(readings.map((reading) => [
-    `${reading.latitude},${reading.longitude}`,
-    reading,
-  ])).values()];
+  // Every area counts once. Readings used to be de-duplicated by the coordinates Open-Meteo
+  // returns, but those are coarse cell centres shared by areas with different values, so that
+  // silently dropped most areas from the average.
   const average = (values) => {
     const available = values.filter(Number.isFinite);
     return available.length ? available.reduce((sum, value) => sum + value, 0) / available.length : null;
@@ -98,11 +90,11 @@ export function aggregateAreaReadings(readings) {
   ];
   const current = Object.fromEntries(currentKeys.map((key) => [
     key,
-    average(uniqueReadings.map((reading) => reading.current[key])),
+    average(readings.map((reading) => reading.current[key])),
   ]));
-  const timestamps = uniqueReadings.map((reading) => reading.current.time).sort();
+  const timestamps = readings.map((reading) => reading.current.time).sort();
   current.time = timestamps[timestamps.length - 1];
-  const hourlyReadings = uniqueReadings.filter((reading) => reading.hourly?.time);
+  const hourlyReadings = readings.filter((reading) => reading.hourly?.time);
   const hourly = hourlyReadings.length
     ? {
       time: hourlyReadings[0].hourly.time,
@@ -125,7 +117,7 @@ export function aggregateAreaReadings(readings) {
     current,
     hourly,
     areaCount: readings.length,
-    modelGridCount: uniqueReadings.length,
+    distinctEstimates: new Set(readings.map(readingSignature)).size,
   };
 }
 
@@ -191,13 +183,31 @@ export async function fetchWeather(location, signal) {
 }
 
 export function aqiCategory(aqi) {
-  if (aqi == null) return { label: "Unavailable", tone: "neutral" };
+  if (!Number.isFinite(aqi)) return { label: "Unavailable", tone: "neutral" };
+  // Categorise the same rounded value the UI displays, so averaged readings
+  // such as 100.4 (shown as 100) are labelled "Moderate", not "Sensitive groups".
+  aqi = Math.round(aqi);
   if (aqi <= 50) return { label: "Good", tone: "good" };
   if (aqi <= 100) return { label: "Moderate", tone: "moderate" };
   if (aqi <= 150) return { label: "Sensitive groups", tone: "sensitive" };
   if (aqi <= 200) return { label: "Unhealthy", tone: "unhealthy" };
   if (aqi <= 300) return { label: "Very unhealthy", tone: "very-unhealthy" };
   return { label: "Hazardous", tone: "hazardous" };
+}
+
+/** US AQI category boundaries, drawn as equal-width segments on the AQI scale bar. */
+export const AQI_BREAKPOINTS = [0, 50, 100, 150, 200, 300, 500];
+export const AQI_SCALE_TONES = ["good", "moderate", "sensitive", "unhealthy", "very-unhealthy", "hazardous"];
+
+/** Position (0–100%) of an AQI value on the equal-segment category scale. */
+export function aqiScalePosition(aqi) {
+  if (!Number.isFinite(aqi)) return null;
+  const value = Math.min(Math.max(aqi, 0), 500);
+  const segment = Math.max(0, AQI_BREAKPOINTS.findIndex((limit) => value <= limit) - 1);
+  const low = AQI_BREAKPOINTS[segment];
+  const high = AQI_BREAKPOINTS[segment + 1];
+  const segmentWidth = 100 / (AQI_BREAKPOINTS.length - 1);
+  return Number((segment * segmentWidth + ((value - low) / (high - low)) * segmentWidth).toFixed(2));
 }
 
 export function localTime(value) {

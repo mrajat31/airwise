@@ -3,3 +3,12 @@ dist/
 .env
 .env.*
 !.env.example
+coverage/
+
+# Generated at deploy time by scripts/fetch-stations.mjs
+public/data/stations.json
+
+# Playwright and Lighthouse output
+test-results/
+playwright-report/
+.lighthouseci/
